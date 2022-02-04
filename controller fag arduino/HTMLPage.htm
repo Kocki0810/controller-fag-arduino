@@ -1,0 +1,101 @@
+<html>
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>LED Control</title>
+    <style>
+        html {
+            font-family: Helvetica;
+            display: inline-block;
+            margin: 0px auto;
+            text-align: center;
+        }
+
+        body {
+            margin-top: 50px;
+        }
+
+        h1 {
+            color: #444444;
+            margin: 50px auto 30px;
+        }
+
+        h3 {
+            color: #444444;
+            margin-bottom: 50px;
+        }
+
+        .button {
+            display: block;
+            width: 80px;
+            background-color: #1abc9c;
+            border: none;
+            color: white;
+            padding: 13px 30px;
+            text-decoration: none;
+            font-size: 25px;
+            margin: 0px auto 35px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .button-on {
+            background-color: #1abc9c;
+        }
+
+            .button-on:active {
+                background-color: #16a085;
+            }
+
+        .button-off {
+            background-color: #34495e;
+        }
+
+            .button-off:active {
+                background-color: #2c3e50;
+            }
+
+        p {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ESP8266 Web Server</h1>
+    <h3>Using Station(STA) Mode</h3>
+    <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">1</span>
+    <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">1</span>
+</body>
+<script>
+    function switchLed(pin) {
+        var text = $("#pin" + pin + "Text")[0].innerText;
+        var state = $("#pin" + pin + "State")[0].innerText;
+        var stateText = ["OFF", "ON", "BLINKING"];
+
+        if (state == 4) {
+            $("#pin" + pin + "State")[0].innerText = 1;
+            state = 1;
+        }
+        else {
+            $("#pin" + pin + "State")[0].innerText++;
+        }
+
+        console.debug(state);
+        //$.ajax({
+
+        //    url: 'http://192.168.0.171/led' + pin + stateText[state - 1],
+        //    type: 'GET',
+        //    success: function (data) {
+        //        text = stateText[state - 1];
+        //    },
+        //    error: function (request, error) {
+        //        //alert("Request: " + JSON.stringify(request));
+        //    },
+        //});
+
+    }
+</script>
+</html>

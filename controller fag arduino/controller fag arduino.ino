@@ -8,12 +8,30 @@
 const char* ssid = "FTTH_JU3332";
 const char* password = "lottePink72!";
 ESP8266WebServer server(80);
+static const uint8_t D0 = 16;
+static const uint8_t D1 = 5;
+static const uint8_t D2 = 4;
+static const uint8_t D3 = 0;
+static const uint8_t D4 = 2;
+static const uint8_t D5 = 14;
+static const uint8_t D6 = 12;
+static const uint8_t D7 = 13;
+static const uint8_t D8 = 15;
+static const uint8_t D9 = 3;
+static const uint8_t D10 = 1;
 
-uint8_t LED1pin = 7;
-bool LED1status = LOW;
+enum LedState
+{
+    OFF = 1,
+    ON = 2,
+    BLINKING = 3
+};
 
-uint8_t LED2pin = 6;
-bool LED2status = LOW;
+uint8_t LED1pin = D6;
+LedState LED1status = OFF;
+
+uint8_t LED2pin = D7;
+LedState LED2status = OFF;
 
 void setup() {
 #ifdef DEBUG    gdbstub_init();
@@ -43,63 +61,94 @@ void setup() {
     server.on("/", handle_OnConnect);
     server.on("/led1on", handle_led1on);
     server.on("/led1off", handle_led1off);
+    server.on("/led1blinking", handle_led1blinking);
+
     server.on("/led2on", handle_led2on);
     server.on("/led2off", handle_led2off);
+    server.on("/led2blinking", handle_led2blinking);
     server.onNotFound(handle_NotFound);
 
     server.begin();
     Serial.println("HTTP server started");
+
+
 }
 void loop() {
     server.handleClient();
-    if (LED1status)
-    {
-        digitalWrite(LED1pin, HIGH);
-    }
-    else
+    if (LED1status == OFF)
     {
         digitalWrite(LED1pin, LOW);
     }
+    else if(LED1status == ON)
+    {
+        digitalWrite(LED1pin, HIGH);
+    }
+    else if (LED1status == BLINKING)
+    {
+        digitalWrite(LED1pin, HIGH);
+        delay(1000);
+        digitalWrite(LED1pin, LOW);
+        delay(1000);
+    }
 
-    if (LED2status)
+    if (LED2status == OFF)
+    {
+        digitalWrite(LED2pin, LOW);
+    }
+    else if (LED2status == ON)
     {
         digitalWrite(LED2pin, HIGH);
     }
-    else
+    else if (LED2status == BLINKING)
     {
+        digitalWrite(LED2pin, HIGH);
+        delay(1000);
         digitalWrite(LED2pin, LOW);
+        delay(1000);
     }
 }
 
 void handle_OnConnect() {
-    LED1status = LOW;
-    LED2status = LOW;
+    LED1status = OFF;
+    LED2status = OFF;
     Serial.println("GPIO7 Status: OFF | GPIO6 Status: OFF");
     server.send(200, "text/html", SendHTML(LED1status, LED2status));
 }
 
 void handle_led1on() {
-    LED1status = HIGH;
+    LED1status = ON;
     Serial.println("GPIO7 Status: ON");
     server.send(200, "text/html", SendHTML(true, LED2status));
 }
 
 void handle_led1off() {
-    LED1status = LOW;
+    LED1status = OFF;
     Serial.println("GPIO7 Status: OFF");
     server.send(200, "text/html", SendHTML(false, LED2status));
 }
 
+void handle_led1blinking() {
+    LED1status = BLINKING;
+    Serial.println("GPIO7 Status: ON");
+    server.send(200, "text/html", SendHTML(true, LED1status));
+}
+
 void handle_led2on() {
-    LED2status = HIGH;
+    LED2status = ON;
     Serial.println("GPIO6 Status: ON");
     server.send(200, "text/html", SendHTML(LED1status, true));
 }
 
 void handle_led2off() {
-    LED2status = LOW;
+    LED2status = OFF;
     Serial.println("GPIO6 Status: OFF");
     server.send(200, "text/html", SendHTML(LED1status, false));
+}
+
+void handle_led2blinking() {
+    LED2status = BLINKING;
+    Serial.println("GPIO7 Status: ON");
+    server.send(200, "text/html", SendHTML(true, LED2status));
 }
 
 void handle_NotFound() {
@@ -107,42 +156,115 @@ void handle_NotFound() {
 }
 
 String SendHTML(uint8_t led1stat, uint8_t led2stat) {
-    String ptr = "<!DOCTYPE html> <html>\n";
-    ptr += "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n";
-    ptr += "<title>LED Control</title>\n";
-    ptr += "<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}\n";
-    ptr += "body{margin-top: 50px;} h1 {color: #444444;margin: 50px auto 30px;} h3 {color: #444444;margin-bottom: 50px;}\n";
-    ptr += ".button {display: block;width: 80px;background-color: #1abc9c;border: none;color: white;padding: 13px 30px;text-decoration: none;font-size: 25px;margin: 0px auto 35px;cursor: pointer;border-radius: 4px;}\n";
-    ptr += ".button-on {background-color: #1abc9c;}\n";
-    ptr += ".button-on:active {background-color: #16a085;}\n";
-    ptr += ".button-off {background-color: #34495e;}\n";
-    ptr += ".button-off:active {background-color: #2c3e50;}\n";
-    ptr += "p {font-size: 14px;color: #888;margin-bottom: 10px;}\n";
-    ptr += "</style>\n";
-    ptr += "</head>\n";
-    ptr += "<body>\n";
-    ptr += "<h1>ESP8266 Web Server</h1>\n";
-    ptr += "<h3>Using Station(STA) Mode</h3>\n";
+    #pragma region html
 
-    if (led1stat)
-    {
-        ptr += "<p>LED1 Status: ON</p><a class=\"button button-off\" href=\"/led1off\">OFF</a>\n";
-    }
-    else
-    {
-        ptr += "<p>LED1 Status: OFF</p><a class=\"button button-on\" href=\"/led1on\">ON</a>\n";
-    }
 
-    if (led2stat)
-    {
-        ptr += "<p>LED2 Status: ON</p><a class=\"button button-off\" href=\"/led2off\">OFF</a>\n";
-    }
-    else
-    {
-        ptr += "<p>LED2 Status: OFF</p><a class=\"button button-on\" href=\"/led2on\">ON</a>\n";
-    }
+    String html = R"V0G0N(
+<html>
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 
-    ptr += "</body>\n";
-    ptr += "</html>\n";
-    return ptr;
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>LED Control</title>
+    <style>
+        html {
+            font-family: Helvetica;
+            display: inline-block;
+            margin: 0px auto;
+            text-align: center;
+        }
+
+        body {
+            margin-top: 50px;
+        }
+
+        h1 {
+            color: #444444;
+            margin: 50px auto 30px;
+        }
+
+        h3 {
+            color: #444444;
+            margin-bottom: 50px;
+        }
+
+        .button {
+            display: block;
+            width: 80px;
+            background-color: #1abc9c;
+            border: none;
+            color: white;
+            padding: 13px 30px;
+            text-decoration: none;
+            font-size: 25px;
+            margin: 0px auto 35px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .button-on {
+            background-color: #1abc9c;
+        }
+
+            .button-on:active {
+                background-color: #16a085;
+            }
+
+        .button-off {
+            background-color: #34495e;
+        }
+
+            .button-off:active {
+                background-color: #2c3e50;
+            }
+
+        p {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ESP8266 Web Server</h1>
+    <h3>Using Station(STA) Mode</h3>
+    <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">1</span>
+    <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">1</span>
+</body>
+<script>
+    function switchLed(pin) {
+        var text = $("#pin" + pin + "Text")[0].innerHTML;
+        var state = $("#pin" + pin + "State")[0].innerHTML;
+        var stateText = ["off", "on", "blinking"];
+
+         if (state == 4) {
+            $("#pin" + pin + "State")[0].innerText = 1;
+            state = 1;
+        }
+        else {
+            $("#pin" + pin + "State")[0].innerText++;
+            state++;
+
+        }
+
+
+        $.ajax({
+
+            url: '/led' + pin + stateText[state - 1],
+            type: 'GET',
+            success: function (data) {
+                $("#pin" + pin + "Text")[0].innerHTML = stateText[state - 1];
+            },
+            error: function (request, error) {
+                //alert("Request: " + JSON.stringify(request));
+            },
+        });
+
+    }
+</script>
+</html>
+    )V0G0N";
+    
+#pragma endregion
+    return html;
 }
