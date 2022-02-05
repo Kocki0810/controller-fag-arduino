@@ -1,10 +1,15 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <Ticker.h>  //Ticker Library
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 #ifdef DEBUG 
 #include "GDBStub.h"
 #endif
 
+Ticker blinker1;
+Ticker blinker2;
 const char* ssid = "FTTH_JU3332";
 const char* password = "lottePink72!";
 ESP8266WebServer server(80);
@@ -27,11 +32,10 @@ enum LedState
     BLINKING = 3
 };
 
-uint8_t LED1pin = D6;
 LedState LED1status = OFF;
-
-uint8_t LED2pin = D7;
 LedState LED2status = OFF;
+bool timer1Running = false;
+bool timer2Running = false;
 
 void setup() {
 #ifdef DEBUG    gdbstub_init();
@@ -40,8 +44,8 @@ void setup() {
 #endif
     Serial.begin(115200);
     delay(100);
-    pinMode(LED1pin, OUTPUT);
-    pinMode(LED2pin, OUTPUT);
+    pinMode(D6, OUTPUT);
+    pinMode(D7, OUTPUT);
 
     Serial.println("Connecting to ");
     Serial.println(ssid);
@@ -70,42 +74,81 @@ void setup() {
 
     server.begin();
     Serial.println("HTTP server started");
-
-
 }
 void loop() {
     server.handleClient();
     if (LED1status == OFF)
     {
-        digitalWrite(LED1pin, LOW);
+        digitalWrite(D6, LOW);
+        DetachTimer(1);
     }
     else if(LED1status == ON)
     {
-        digitalWrite(LED1pin, HIGH);
+        digitalWrite(D6, HIGH);
+        DetachTimer(1);
     }
     else if (LED1status == BLINKING)
     {
-        digitalWrite(LED1pin, HIGH);
-        delay(1000);
-        digitalWrite(LED1pin, LOW);
-        delay(1000);
+        AttachTimer(D6);
     }
 
     if (LED2status == OFF)
     {
-        digitalWrite(LED2pin, LOW);
+        digitalWrite(D7, LOW);
+        DetachTimer(2);
     }
     else if (LED2status == ON)
     {
-        digitalWrite(LED2pin, HIGH);
+        digitalWrite(D7, HIGH);
+        DetachTimer(2);
     }
     else if (LED2status == BLINKING)
     {
-        digitalWrite(LED2pin, HIGH);
-        delay(1000);
-        digitalWrite(LED2pin, LOW);
-        delay(1000);
+        AttachTimer(D7);
     }
+}
+void AttachTimer(uint8_t pin)
+{
+    if (pin == D6)
+    {
+
+        if (!timer1Running)
+        {
+            blinker1.attach_ms(1000, TimerPin1, pin);
+            timer1Running = true;
+        }
+    }
+    else if (pin == D7)
+    {
+        if (!timer2Running)
+        {
+            blinker2.attach_ms(1000, TimerPin1, pin);
+            timer2Running = true;
+        }
+    }
+}
+void DetachTimer(int timer)
+{
+    if (timer == 1)
+    {
+        if (timer1Running)
+        {
+            blinker1.detach();
+            timer1Running = false;
+        }
+    }
+    else if(timer == 2)
+    {
+        if (timer2Running)
+        {
+            blinker2.detach();
+            timer2Running = false;
+        }
+    }
+}
+
+void TimerPin1(uint8_t pin) {
+    digitalWrite(pin, !(digitalRead(pin)));  //Toggle LED Pin
 }
 
 void handle_OnConnect() {
@@ -129,7 +172,7 @@ void handle_led1off() {
 
 void handle_led1blinking() {
     LED1status = BLINKING;
-    Serial.println("GPIO7 Status: ON");
+    Serial.println("GPIO7 Status: BLINKING");
     server.send(200, "text/html", SendHTML(true, LED1status));
 }
 
@@ -147,7 +190,7 @@ void handle_led2off() {
 
 void handle_led2blinking() {
     LED2status = BLINKING;
-    Serial.println("GPIO7 Status: ON");
+    Serial.println("GPIO7 Status: BLINKING");
     server.send(200, "text/html", SendHTML(true, LED2status));
 }
 
@@ -190,7 +233,7 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
 
         .button {
             display: block;
-            width: 80px;
+            width: 110px;
             background-color: #1abc9c;
             border: none;
             color: white;
@@ -228,8 +271,8 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
 <body>
     <h1>ESP8266 Web Server</h1>
     <h3>Using Station(STA) Mode</h3>
-    <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">1</span>
-    <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">1</span>
+    <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">0</span>
+    <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">0</span>
 </body>
 <script>
     function switchLed(pin) {
@@ -237,9 +280,9 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
         var state = $("#pin" + pin + "State")[0].innerHTML;
         var stateText = ["off", "on", "blinking"];
 
-         if (state == 4) {
-            $("#pin" + pin + "State")[0].innerText = 1;
-            state = 1;
+         if (state == 2) {
+            $("#pin" + pin + "State")[0].innerText = 0;
+            state = 0;
         }
         else {
             $("#pin" + pin + "State")[0].innerText++;
@@ -250,10 +293,10 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
 
         $.ajax({
 
-            url: '/led' + pin + stateText[state - 1],
+            url: '/led' + pin + stateText[state],
             type: 'GET',
             success: function (data) {
-                $("#pin" + pin + "Text")[0].innerHTML = stateText[state - 1];
+                $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
             },
             error: function (request, error) {
                 //alert("Request: " + JSON.stringify(request));
