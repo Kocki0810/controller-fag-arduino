@@ -16,6 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="controller fag arduino.ino" />
+    <None Include="HTMLPage.htm" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="__vm\.controller fag arduino.vsarduino.h">
