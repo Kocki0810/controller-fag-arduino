@@ -1,3 +1,5 @@
+#include <splash.h>
+#include <gfxfont.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <Ticker.h>  //Ticker Library
@@ -10,11 +12,16 @@
 #ifdef DEBUG 
 #include "GDBStub.h"
 #endif
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 Ticker blinker1;
 Ticker blinker2;
-const char* ssid = "FTTH_JU3332";
-const char* password = "lottePink72!";
+const char* ssid = "NodeMCU_Station_Mode";
+const char* password = "h5pd091121_Styrer";
 ESP8266WebServer server(80);
 static const uint8_t D0 = 16;
 static const uint8_t D1 = 5;
@@ -27,6 +34,14 @@ static const uint8_t D7 = 13;
 static const uint8_t D8 = 15;
 static const uint8_t D9 = 3;
 static const uint8_t D10 = 1;
+volatile bool timer1Running = false;
+volatile bool timer2Running = false;
+
+volatile int blinkIterator1 = 0;
+volatile int blinkIterator2 = 0;
+
+volatile bool BlinkFlag1 = false;
+volatile bool BlinkFlag2 = false;
 
 enum LedState
 {
@@ -35,10 +50,9 @@ enum LedState
     BLINKING = 3
 };
 
-LedState LED1status = OFF;
-LedState LED2status = OFF;
-bool timer1Running = false;
-bool timer2Running = false;
+volatile LedState LED1status = OFF;
+volatile LedState LED2status = OFF;
+
 
 void setup() {
 #ifdef DEBUG    gdbstub_init();
@@ -77,6 +91,10 @@ void setup() {
 
     server.begin();
     Serial.println("HTTP server started");
+    
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 10);
 }
 void loop() {
     server.handleClient();
@@ -93,6 +111,7 @@ void loop() {
     else if (LED1status == BLINKING)
     {
         AttachTimer(D6);
+        CheckIteratorFlag(D6);
     }
 
     if (LED2status == OFF)
@@ -108,13 +127,41 @@ void loop() {
     else if (LED2status == BLINKING)
     {
         AttachTimer(D7);
+        CheckIteratorFlag(D7);
     }
 }
+void CheckIteratorFlag(uint16_t pin)
+{
+    if(pin == D6)
+    {
+        if (BlinkFlag1)
+        {
+            blinkIterator1++;
+            BlinkFlag1 = false;
+            Serial.println(blinkIterator1);
+            display.clearDisplay();
+            // Display static text
+            display.println("Blinking:");
+            display.display();
+        }
+    }
+    else if(pin == D7)
+    {
+        if (BlinkFlag2)
+        {
+            blinkIterator2++;
+            BlinkFlag2 = false;
+            Serial.println(blinkIterator2);
+        }
+    }
+
+}
+
+
 void AttachTimer(uint8_t pin)
 {
     if (pin == D6)
     {
-
         if (!timer1Running)
         {
             blinker1.attach_ms(1000, TimerPin1, pin);
@@ -152,6 +199,14 @@ void DetachTimer(int timer)
 
 void TimerPin1(uint8_t pin) {
     digitalWrite(pin, !(digitalRead(pin)));  //Toggle LED Pin
+    if (pin == D6)
+    {
+        BlinkFlag1 = true;
+    }
+    else if (pin == D7)
+    {
+        BlinkFlag2 = true;
+    }
 }
 
 void handle_OnConnect() {
