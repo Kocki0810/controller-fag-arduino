@@ -1,5 +1,3 @@
-#include <splash.h>
-#include <gfxfont.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <Ticker.h>  //Ticker Library
@@ -8,12 +6,13 @@
 #include <Adafruit_SSD1306.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <string>
 
-#ifdef DEBUG 
+#ifdef VM_DEBUG_GDB 
 #include "GDBStub.h"
 #endif
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -23,17 +22,7 @@ Ticker blinker2;
 const char* ssid = "NodeMCU_Station_Mode";
 const char* password = "h5pd091121_Styrer";
 ESP8266WebServer server(80);
-static const uint8_t D0 = 16;
-static const uint8_t D1 = 5;
-static const uint8_t D2 = 4;
-static const uint8_t D3 = 0;
-static const uint8_t D4 = 2;
-static const uint8_t D5 = 14;
-static const uint8_t D6 = 12;
-static const uint8_t D7 = 13;
-static const uint8_t D8 = 15;
-static const uint8_t D9 = 3;
-static const uint8_t D10 = 1;
+
 volatile bool timer1Running = false;
 volatile bool timer2Running = false;
 
@@ -43,19 +32,30 @@ volatile int blinkIterator2 = 0;
 volatile bool BlinkFlag1 = false;
 volatile bool BlinkFlag2 = false;
 
+volatile int interruptCounter = 0;
+String LEDStrength1;
+String LEDStrength2;
+
 enum LedState
 {
     OFF = 1,
     ON = 2,
-    BLINKING = 3
+    BLINKING = 3,
+    DIMMED = 4
 };
 
 volatile LedState LED1status = OFF;
 volatile LedState LED2status = OFF;
-
+ICACHE_RAM_ATTR void ButtonPressedInterrupt()
+{
+    interruptCounter++;
+    Serial.print("External interrupts: ");
+    Serial.println(interruptCounter);
+    
+}
 
 void setup() {
-#ifdef DEBUG    gdbstub_init();
+#ifdef VM_DEBUG_GDB gdbstub_init();
     // Add/extend the below delay if you want to debug the setup code
     delay(3000);
 #endif
@@ -63,6 +63,9 @@ void setup() {
     delay(100);
     pinMode(D6, OUTPUT);
     pinMode(D7, OUTPUT);
+    pinMode(D0, INPUT_PULLUP);
+
+    analogWriteRange(1023);
 
     Serial.println("Connecting to ");
     Serial.println(ssid);
@@ -91,10 +94,16 @@ void setup() {
 
     server.begin();
     Serial.println("HTTP server started");
+    //display.clearDisplay();
+
+    //display.setTextSize(1);
+    //display.setTextColor(WHITE);
+    //display.setCursor(0, 10);
+    //// Display static text
+    //display.println("Hello, world!");
+    //display.display();
+    attachInterrupt(D4, ButtonPressedInterrupt, CHANGE);
     
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0, 10);
 }
 void loop() {
     server.handleClient();
@@ -113,6 +122,11 @@ void loop() {
         AttachTimer(D6);
         CheckIteratorFlag(D6);
     }
+    else if (LED1status == DIMMED)
+    {
+        analogWrite(D6, LEDStrength1.toInt());
+        DetachTimer(1);
+    }
 
     if (LED2status == OFF)
     {
@@ -129,7 +143,14 @@ void loop() {
         AttachTimer(D7);
         CheckIteratorFlag(D7);
     }
+    else if (LED2status == DIMMED)
+    {
+        analogWrite(D7, LEDStrength2.toInt());
+        DetachTimer(2);
+    }
+   
 }
+
 void CheckIteratorFlag(uint16_t pin)
 {
     if(pin == D6)
@@ -139,10 +160,7 @@ void CheckIteratorFlag(uint16_t pin)
             blinkIterator1++;
             BlinkFlag1 = false;
             Serial.println(blinkIterator1);
-            display.clearDisplay();
-            // Display static text
-            display.println("Blinking:");
-            display.display();
+            
         }
     }
     else if(pin == D7)
@@ -217,15 +235,23 @@ void handle_OnConnect() {
 }
 
 void handle_led1on() {
-    LED1status = ON;
-    Serial.println("GPIO7 Status: ON");
-    server.send(200, "text/html", SendHTML(true, LED2status));
+    if (server.arg("Strength") != "")
+    {
+        LED1status = DIMMED;
+        LEDStrength1 = server.arg("Strength");
+    }
+    else
+    {
+        LED1status = ON;
+        Serial.println("GPIO7 Status: ON");
+    }
+    server.send(200, "text/html", SendHTML(true, LED1status));
 }
 
 void handle_led1off() {
     LED1status = OFF;
     Serial.println("GPIO7 Status: OFF");
-    server.send(200, "text/html", SendHTML(false, LED2status));
+    server.send(200, "text/html", SendHTML(false, LED1status));
 }
 
 void handle_led1blinking() {
@@ -235,15 +261,24 @@ void handle_led1blinking() {
 }
 
 void handle_led2on() {
-    LED2status = ON;
-    Serial.println("GPIO6 Status: ON");
-    server.send(200, "text/html", SendHTML(LED1status, true));
+    if (server.arg("Strength") != "")
+    {
+        LED2status = DIMMED;
+        LEDStrength2 = server.arg("Strength");
+    }
+    else
+    {
+        LED2status = ON;
+        Serial.println("GPIO6 Status: ON");
+
+    }
+    server.send(200, "text/html", SendHTML(LED2status, true));
 }
 
 void handle_led2off() {
     LED2status = OFF;
     Serial.println("GPIO6 Status: OFF");
-    server.send(200, "text/html", SendHTML(LED1status, false));
+    server.send(200, "text/html", SendHTML(LED2status, false));
 }
 
 void handle_led2blinking() {
@@ -330,24 +365,36 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
     <h1>ESP8266 Web Server</h1>
     <h3>Using Station(STA) Mode</h3>
     <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">0</span>
+    <div id="led1StrengthPicker">
+        <input onclick="LedStrength(1)" type="range" id="pin1Strength" value="0" max="1023">
+        <p id="rangeValue1">0</p>
+    </div>
+    
     <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">0</span>
+    <div id="led2StrengthPicker">
+        <input onclick="LedStrength(2)" type="range" id="pin2Strength" value="0" max="1023">
+        <p id="rangeValue2">0</p>
+    </div>
 </body>
 <script>
     function switchLed(pin) {
-        var text = $("#pin" + pin + "Text")[0].innerHTML;
         var state = $("#pin" + pin + "State")[0].innerHTML;
         var stateText = ["off", "on", "blinking"];
 
-         if (state == 2) {
+        if (state == 2) {
             $("#pin" + pin + "State")[0].innerText = 0;
             state = 0;
         }
         else {
             $("#pin" + pin + "State")[0].innerText++;
             state++;
-
         }
-
+        if (state == 1) {
+            $("#led" + pin + "StrengthPicker").show();
+        }
+        else {
+            $("#led" + pin + "StrengthPicker").hide();
+        }
 
         $.ajax({
 
@@ -355,12 +402,28 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
             type: 'GET',
             success: function (data) {
                 $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
+
             },
             error: function (request, error) {
                 //alert("Request: " + JSON.stringify(request));
             },
         });
 
+    }
+    function LedStrength(pin) {
+        var ledStrength = $("#pin"+pin+"Strength")[0].value;
+        $("#rangeValue" + pin)[0].innerHTML = ledStrength;
+
+        $.ajax({
+
+            url: '/led' + pin + "on?Strength="+ledStrength,
+            type: 'GET',
+            success: function (data) {
+            },
+            error: function (request, error) {
+                //alert("Request: " + JSON.stringify(request));
+            },
+        });
     }
 </script>
 </html>

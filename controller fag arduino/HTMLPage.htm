@@ -28,7 +28,7 @@
 
         .button {
             display: block;
-            width: 80px;
+            width: 110px;
             background-color: #1abc9c;
             border: none;
             color: white;
@@ -66,36 +66,65 @@
 <body>
     <h1>ESP8266 Web Server</h1>
     <h3>Using Station(STA) Mode</h3>
-    <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">1</span>
-    <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">1</span>
+    <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">0</span>
+    <div id="led1StrengthPicker">
+        <input onclick="LedStrength(1)" type="range" id="pin1Strength" value="0" max="1023">
+        <p id="rangeValue1">0</p>
+    </div>
+    
+    <p>LED2 State: Click to switch</p><span onclick="switchLed(2)" id="pin2Text" class="button button-on">ON</span><span style="display:none;" id="pin2State">0</span>
+    <div id="led2StrengthPicker">
+        <input onclick="LedStrength(2)" type="range" id="pin2Strength" value="0" max="1023">
+        <p id="rangeValue2">0</p>
+    </div>
 </body>
 <script>
     function switchLed(pin) {
-        var text = $("#pin" + pin + "Text")[0].innerText;
-        var state = $("#pin" + pin + "State")[0].innerText;
-        var stateText = ["OFF", "ON", "BLINKING"];
+        var state = $("#pin" + pin + "State")[0].innerHTML;
+        var stateText = ["off", "on", "blinking"];
 
-        if (state == 4) {
-            $("#pin" + pin + "State")[0].innerText = 1;
-            state = 1;
+        if (state == 2) {
+            $("#pin" + pin + "State")[0].innerText = 0;
+            state = 0;
         }
         else {
             $("#pin" + pin + "State")[0].innerText++;
+            state++;
+        }
+        if (stateText == "on") {
+            $("#led" + pin + "StrengthPicker").show();
+        }
+        else {
+            $("#led" + pin + "StrengthPicker").hide();
         }
 
-        console.debug(state);
-        //$.ajax({
+        $.ajax({
 
-        //    url: 'http://192.168.0.171/led' + pin + stateText[state - 1],
-        //    type: 'GET',
-        //    success: function (data) {
-        //        text = stateText[state - 1];
-        //    },
-        //    error: function (request, error) {
-        //        //alert("Request: " + JSON.stringify(request));
-        //    },
-        //});
+            url: '/led' + pin + stateText[state],
+            type: 'GET',
+            success: function (data) {
+                $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
+            },
+            error: function (request, error) {
+                //alert("Request: " + JSON.stringify(request));
+            },
+        });
 
+    }
+    function LedStrength(pin) {
+        var ledStrength = $("#pin"+pin+"Strength")[0].value;
+        $("#rangeValue" + pin)[0].innerHTML = ledStrength;
+
+        $.ajax({
+
+            url: '/led' + pin + "?Strength="+ledStrength,
+            type: 'GET',
+            success: function (data) {
+            },
+            error: function (request, error) {
+                //alert("Request: " + JSON.stringify(request));
+            },
+        });
     }
 </script>
 </html>
