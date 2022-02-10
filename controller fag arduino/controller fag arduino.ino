@@ -13,7 +13,7 @@
 #endif
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-
+#define SCREEN_ADDRESS 0x3C
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -46,12 +46,32 @@ enum LedState
 
 volatile LedState LED1status = OFF;
 volatile LedState LED2status = OFF;
-ICACHE_RAM_ATTR void ButtonPressedInterrupt()
+
+void externalInterruptDisplay()
+{
+    display.clearDisplay();
+    display.setTextSize(1);             // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE);        // Draw white text
+    display.setCursor(0, 0);             // Start at top-left corner
+    display.print("Pin 1 Blinked: ");
+    display.println(blinkIterator1);
+
+    display.setCursor(0, 10);             // Start at top-left corner
+    display.print("Pin 2 Blinked: ");
+    display.println(blinkIterator2);
+    display.setTextSize(1);             // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE);        // Draw white text
+    display.setCursor(0, 20);             // Start at top-left corner
+    display.print("External interrupts: ");
+    display.println(interruptCounter);
+    display.display();
+}
+
+void ICACHE_RAM_ATTR ButtonPressedInterrupt()
 {
     interruptCounter++;
-    Serial.print("External interrupts: ");
-    Serial.println(interruptCounter);
-    
+    externalInterruptDisplay();
+
 }
 
 void setup() {
@@ -94,15 +114,16 @@ void setup() {
 
     server.begin();
     Serial.println("HTTP server started");
-    //display.clearDisplay();
+    if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+        Serial.println(F("SSD1306 allocation failed"));
+        for (;;); // Don't proceed, loop forever
+    }
+    display.display();
+    delay(2000); // Pause for 2 seconds
 
-    //display.setTextSize(1);
-    //display.setTextColor(WHITE);
-    //display.setCursor(0, 10);
-    //// Display static text
-    //display.println("Hello, world!");
-    //display.display();
-    attachInterrupt(D4, ButtonPressedInterrupt, CHANGE);
+    // Clear the buffer
+    display.clearDisplay();
+    attachInterrupt(D0, ButtonPressedInterrupt, FALLING);
     
 }
 void loop() {
@@ -151,6 +172,7 @@ void loop() {
    
 }
 
+
 void CheckIteratorFlag(uint16_t pin)
 {
     if(pin == D6)
@@ -160,7 +182,6 @@ void CheckIteratorFlag(uint16_t pin)
             blinkIterator1++;
             BlinkFlag1 = false;
             Serial.println(blinkIterator1);
-            
         }
     }
     else if(pin == D7)
@@ -172,6 +193,20 @@ void CheckIteratorFlag(uint16_t pin)
             Serial.println(blinkIterator2);
         }
     }
+    display.clearDisplay();
+    display.setTextSize(1);             // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE);        // Draw white text
+    display.setCursor(0, 0);             // Start at top-left corner
+    display.print("Pin 1 Blinked: ");
+    display.println(blinkIterator1);
+
+    display.setCursor(0, 10);             // Start at top-left corner
+    display.print("Pin 2 Blinked: ");
+    display.println(blinkIterator2);
+    display.setCursor(0, 20);             // Start at top-left corner
+    display.print("External interrupts: ");
+    display.println(interruptCounter);
+    display.display();
 
 }
 
@@ -219,7 +254,7 @@ void TimerPin1(uint8_t pin) {
     digitalWrite(pin, !(digitalRead(pin)));  //Toggle LED Pin
     if (pin == D6)
     {
-        BlinkFlag1 = true;
+        BlinkFlag1 = true;   
     }
     else if (pin == D7)
     {
