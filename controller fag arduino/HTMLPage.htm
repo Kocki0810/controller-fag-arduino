@@ -63,7 +63,7 @@
         }
     </style>
 </head>
-<body>
+<body onload="init()">
     <h1>ESP8266 Web Server</h1>
     <h3>Using Station(STA) Mode</h3>
     <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">0</span>
@@ -79,6 +79,13 @@
     </div>
 </body>
 <script>
+    function init(){
+        Socket = new WebSocket('ws://' + window.location.hostname + ':81/');
+        Socket.onmessage = function (event) {
+            document.getElementById("rxConsole").value += event.data;
+        }
+    }
+
     function switchLed(pin) {
         var state = $("#pin" + pin + "State")[0].innerHTML;
         var stateText = ["off", "on", "blinking"];
@@ -97,34 +104,34 @@
         else {
             $("#led" + pin + "StrengthPicker").hide();
         }
+        Socket.send(pin + stateText[state]);
+        $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
+        //$.ajax({
 
-        $.ajax({
-
-            url: '/led' + pin + stateText[state],
-            type: 'GET',
-            success: function (data) {
-                $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
-            },
-            error: function (request, error) {
-                //alert("Request: " + JSON.stringify(request));
-            },
-        });
+        //    url: '/led' + pin + stateText[state],
+        //    type: 'GET',
+        //    success: function (data) {
+        //    },
+        //    error: function (request, error) {
+        //        //alert("Request: " + JSON.stringify(request));
+        //    },
+        //});
 
     }
     function LedStrength(pin) {
         var ledStrength = $("#pin"+pin+"Strength")[0].value;
         $("#rangeValue" + pin)[0].innerHTML = ledStrength;
+        Socket.send("s" + pin + ledStrength)
+        //$.ajax({
 
-        $.ajax({
-
-            url: '/led' + pin + "?Strength="+ledStrength,
-            type: 'GET',
-            success: function (data) {
-            },
-            error: function (request, error) {
-                //alert("Request: " + JSON.stringify(request));
-            },
-        });
+        //    url: '/led' + pin + "?Strength="+ledStrength,
+        //    type: 'GET',
+        //    success: function (data) {
+        //    },
+        //    error: function (request, error) {
+        //        //alert("Request: " + JSON.stringify(request));
+        //    },
+        //});
     }
 </script>
 </html>

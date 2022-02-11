@@ -7,7 +7,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <string>
-
+#include <WebSocketsServer.h>
 #ifdef VM_DEBUG_GDB 
 #include "GDBStub.h"
 #endif
@@ -15,8 +15,9 @@
 #define SCREEN_HEIGHT 64
 #define SCREEN_ADDRESS 0x3C
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
+WebSocketsServer webSocket = WebSocketsServer(81);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 Ticker blinker1;
 Ticker blinker2;
 const char* ssid = "NodeMCU_Station_Mode";
@@ -35,14 +36,17 @@ volatile bool BlinkFlag2 = false;
 volatile int interruptCounter = 0;
 String LEDStrength1;
 String LEDStrength2;
+volatile bool eksternalInterrupt = false;
 
 enum LedState
 {
-    OFF = 1,
-    ON = 2,
-    BLINKING = 3,
-    DIMMED = 4
+    OFF,
+    ON,
+    BLINKING,
+    DIMMED
 };
+
+char* LedStates[] = { "OFF: ", "ON: ", "BLINKING: ", "DIMMED: " };
 
 volatile LedState LED1status = OFF;
 volatile LedState LED2status = OFF;
@@ -53,25 +57,34 @@ void externalInterruptDisplay()
     display.setTextSize(1);             // Normal 1:1 pixel scale
     display.setTextColor(SSD1306_WHITE);        // Draw white text
     display.setCursor(0, 0);             // Start at top-left corner
-    display.print("Pin 1 Blinked: ");
+    display.print("Pin 1 ");
+    display.print(LedStates[LED1status]);
     display.println(blinkIterator1);
 
-    display.setCursor(0, 10);             // Start at top-left corner
-    display.print("Pin 2 Blinked: ");
+    display.setCursor(0, 20);             // Start at top-left corner
+    display.print("Pin 2 ");
+    display.print(LedStates[LED2status]);
     display.println(blinkIterator2);
     display.setTextSize(1);             // Normal 1:1 pixel scale
     display.setTextColor(SSD1306_WHITE);        // Draw white text
-    display.setCursor(0, 20);             // Start at top-left corner
+    display.setCursor(0, 40);             // Start at top-left corner
+
     display.print("External interrupts: ");
     display.println(interruptCounter);
     display.display();
 }
 
-void ICACHE_RAM_ATTR ButtonPressedInterrupt()
+void IRAM_ATTR ButtonPressedInterrupt()
+{
+    eksternalInterrupt = true;
+    
+}
+
+void ExternalInterrupt()
 {
     interruptCounter++;
-    externalInterruptDisplay();
-
+    Serial.println("Eksternt interrupt");
+    eksternalInterrupt = false;
 }
 
 void setup() {
@@ -83,7 +96,7 @@ void setup() {
     delay(100);
     pinMode(D6, OUTPUT);
     pinMode(D7, OUTPUT);
-    pinMode(D0, INPUT_PULLUP);
+    pinMode(D4, INPUT_PULLUP);
 
     analogWriteRange(1023);
 
@@ -123,7 +136,10 @@ void setup() {
 
     // Clear the buffer
     display.clearDisplay();
-    attachInterrupt(D0, ButtonPressedInterrupt, FALLING);
+    attachInterrupt(D4, ButtonPressedInterrupt, FALLING);
+
+    webSocket.begin();
+    webSocket.onEvent(webSocketEvent);
     
 }
 void loop() {
@@ -169,9 +185,34 @@ void loop() {
         analogWrite(D7, LEDStrength2.toInt());
         DetachTimer(2);
     }
-   
+    if (eksternalInterrupt)
+    {
+        ExternalInterrupt();
+    }
+    externalInterruptDisplay();
 }
 
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+    String message = (char*)payload;
+    
+
+
+    if (type == WStype_TEXT) {
+        if (message[0] == 's') {
+            uint16_t brightness = (uint16_t)strtol((const char*)&payload[1], NULL, 10);
+            Serial.println(message.substring(1, message.length()-2));
+
+        }
+
+        else {
+            for (int i = 0; i < length; i++)
+                Serial.print((char)payload[i]);
+            Serial.println();
+        }
+    }
+
+}
 
 void CheckIteratorFlag(uint16_t pin)
 {
@@ -193,21 +234,6 @@ void CheckIteratorFlag(uint16_t pin)
             Serial.println(blinkIterator2);
         }
     }
-    display.clearDisplay();
-    display.setTextSize(1);             // Normal 1:1 pixel scale
-    display.setTextColor(SSD1306_WHITE);        // Draw white text
-    display.setCursor(0, 0);             // Start at top-left corner
-    display.print("Pin 1 Blinked: ");
-    display.println(blinkIterator1);
-
-    display.setCursor(0, 10);             // Start at top-left corner
-    display.print("Pin 2 Blinked: ");
-    display.println(blinkIterator2);
-    display.setCursor(0, 20);             // Start at top-left corner
-    display.print("External interrupts: ");
-    display.println(interruptCounter);
-    display.display();
-
 }
 
 
@@ -269,8 +295,8 @@ void handle_OnConnect() {
     server.send(200, "text/html", SendHTML(LED1status, LED2status));
 }
 
-void handle_led1on() {
-    if (server.arg("Strength") != "")
+void handle_led1on(bool dim = false) {
+    if (dim)
     {
         LED1status = DIMMED;
         LEDStrength1 = server.arg("Strength");
@@ -295,8 +321,8 @@ void handle_led1blinking() {
     server.send(200, "text/html", SendHTML(true, LED1status));
 }
 
-void handle_led2on() {
-    if (server.arg("Strength") != "")
+void handle_led2on(bool dim = false) {
+    if (dim)
     {
         LED2status = DIMMED;
         LEDStrength2 = server.arg("Strength");
@@ -305,7 +331,6 @@ void handle_led2on() {
     {
         LED2status = ON;
         Serial.println("GPIO6 Status: ON");
-
     }
     server.send(200, "text/html", SendHTML(LED2status, true));
 }
@@ -396,7 +421,7 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
         }
     </style>
 </head>
-<body>
+<body onload="init()">
     <h1>ESP8266 Web Server</h1>
     <h3>Using Station(STA) Mode</h3>
     <p>LED1 State: Click to switch</p><span onclick="switchLed(1)" id="pin1Text" class="button button-on">ON</span><span style="display:none;" id="pin1State">0</span>
@@ -412,6 +437,13 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
     </div>
 </body>
 <script>
+    function init(){
+        Socket = new WebSocket('ws://' + window.location.hostname + ':81/');
+        Socket.onmessage = function (event) {
+            document.getElementById("rxConsole").value += event.data;
+        }
+    }
+
     function switchLed(pin) {
         var state = $("#pin" + pin + "State")[0].innerHTML;
         var stateText = ["off", "on", "blinking"];
@@ -424,41 +456,40 @@ String SendHTML(uint8_t led1stat, uint8_t led2stat) {
             $("#pin" + pin + "State")[0].innerText++;
             state++;
         }
-        if (state == 1) {
+        if (stateText == "on") {
             $("#led" + pin + "StrengthPicker").show();
         }
         else {
             $("#led" + pin + "StrengthPicker").hide();
         }
+        Socket.send(pin + " " + stateText[state]);
+        $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
+        //$.ajax({
 
-        $.ajax({
-
-            url: '/led' + pin + stateText[state],
-            type: 'GET',
-            success: function (data) {
-                $("#pin" + pin + "Text")[0].innerHTML = stateText[state].toUpperCase();
-
-            },
-            error: function (request, error) {
-                //alert("Request: " + JSON.stringify(request));
-            },
-        });
+        //    url: '/led' + pin + stateText[state],
+        //    type: 'GET',
+        //    success: function (data) {
+        //    },
+        //    error: function (request, error) {
+        //        //alert("Request: " + JSON.stringify(request));
+        //    },
+        //});
 
     }
     function LedStrength(pin) {
         var ledStrength = $("#pin"+pin+"Strength")[0].value;
         $("#rangeValue" + pin)[0].innerHTML = ledStrength;
+        Socket.send(pin + " strength " + ledStrength)
+        //$.ajax({
 
-        $.ajax({
-
-            url: '/led' + pin + "on?Strength="+ledStrength,
-            type: 'GET',
-            success: function (data) {
-            },
-            error: function (request, error) {
-                //alert("Request: " + JSON.stringify(request));
-            },
-        });
+        //    url: '/led' + pin + "?Strength="+ledStrength,
+        //    type: 'GET',
+        //    success: function (data) {
+        //    },
+        //    error: function (request, error) {
+        //        //alert("Request: " + JSON.stringify(request));
+        //    },
+        //});
     }
 </script>
 </html>
